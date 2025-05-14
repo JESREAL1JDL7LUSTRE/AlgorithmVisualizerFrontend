@@ -1,65 +1,44 @@
-import { Box, Text, Circle, VStack, HStack } from '@chakra-ui/react';
+import React from 'react';
 
-const nodeColors = {
-  default: '#ccc',
-  source: '#68D391',
-  sink: '#F56565',
-  visited: '#4299E1',
-  active: '#ED8936',
-  path: '#805AD5',
-};
+const LegendItem = ({ color, label }: { color: string; label: string }) => (
+  <div className="flex items-center gap-2">
+    <div 
+      className="w-4 h-4 rounded-sm"
+      style={{ backgroundColor: color }}
+    />
+    <span className="text-sm">{label}</span>
+  </div>
+);
 
 const GraphLegend = () => {
   return (
-    <Box p={3} borderWidth="1px" borderRadius="md" bg="white">
-      <VStack align="flex-start" spacing={3}>
-        <Text fontWeight="bold">Legend</Text>
+    <div className="p-4 bg-white rounded-lg shadow">
+      <h3 className="text-lg font-medium mb-3">Legend</h3>
+      <div className="space-y-2">
+        <h4 className="text-sm font-medium">Nodes</h4>
+        <div className="grid grid-cols-2 gap-2">
+          <LegendItem color="#ffffff" label="Unvisited" />
+          <LegendItem color="#4dabf7" label="Visited" />
+          <LegendItem color="#ffcc00" label="BFS Current" />
+          <LegendItem color="#ff9900" label="DFS Current" />
+        </div>
         
-        <Box>
-          <Text mb={1} fontWeight="medium">Nodes:</Text>
-          <VStack align="flex-start" spacing={1}>
-            <HStack>
-              <Circle size="16px" bg={nodeColors.source} border="1px solid #333" />
-              <Text fontSize="sm">Source Node</Text>
-            </HStack>
-            <HStack>
-              <Circle size="16px" bg={nodeColors.sink} border="1px solid #333" />
-              <Text fontSize="sm">Sink Node</Text>
-            </HStack>
-            <HStack>
-              <Circle size="16px" bg={nodeColors.default} border="1px solid #333" />
-              <Text fontSize="sm">Default Node</Text>
-            </HStack>
-            <HStack>
-              <Circle size="16px" bg={nodeColors.visited} border="1px solid #333" />
-              <Text fontSize="sm">Visited Node</Text>
-            </HStack>
-          </VStack>
-        </Box>
+        <div className="mt-4">
+          <h4 className="text-sm font-medium">Edges</h4>
+          <div className="grid grid-cols-2 gap-2">
+            <LegendItem color="#b1b1b7" label="No Flow" />
+            <LegendItem color="rgba(255, 0, 0, 0.3)" label="Low Flow" />
+            <LegendItem color="rgba(255, 0, 0, 0.7)" label="Medium Flow" />
+            <LegendItem color="rgba(255, 0, 0, 1)" label="Max Flow" />
+          </div>
+        </div>
         
-        <Box>
-          <Text mb={1} fontWeight="medium">Edges:</Text>
-          <VStack align="flex-start" spacing={1}>
-            <HStack>
-              <Box h="3px" w="20px" bg="#888" />
-              <Text fontSize="sm">No Flow</Text>
-            </HStack>
-            <HStack>
-              <Box h="3px" w="20px" bg="rgba(66, 153, 225, 0.6)" />
-              <Text fontSize="sm">Partial Flow</Text>
-            </HStack>
-            <HStack>
-              <Box h="3px" w="20px" bg="#F56565" />
-              <Text fontSize="sm">Full Capacity</Text>
-            </HStack>
-            <HStack>
-              <Box h="3px" w="20px" bg="#805AD5" />
-              <Text fontSize="sm">Currently Explored</Text>
-            </HStack>
-          </VStack>
-        </Box>
-      </VStack>
-    </Box>
+        <div className="mt-4 text-xs text-gray-600">
+          <p>Edge labels show current flow / capacity</p>
+          <p>Animated edges indicate active flow paths</p>
+        </div>
+      </div>
+    </div>
   );
 };
 
