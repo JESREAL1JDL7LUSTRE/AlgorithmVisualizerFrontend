@@ -84,6 +84,8 @@ export class FlowAlgorithmService {
   }
   
   private handleMessage(data: any): void {
+    if (!this.ws) return;
+    
     switch (data.type) {
       case 'init':
         // Initialize graph with nodes and edges
@@ -203,6 +205,13 @@ export class FlowAlgorithmService {
   
   public async startAlgorithm(config: AlgorithmConfig): Promise<void> {
     try {
+      console.log('Starting algorithm with config:', config);
+      
+      if (!this.isConnected()) {
+        console.log('WebSocket not connected, attempting to connect...');
+        this.connect();
+      }
+      
       const response = await fetch(`${this.baseUrl}/start-algorithm`, {
         method: 'POST',
         headers: {
@@ -211,11 +220,14 @@ export class FlowAlgorithmService {
         body: JSON.stringify(config)
       });
       
+      const responseText = await response.text();
+      console.log('Raw response:', responseText);
+      
       if (!response.ok) {
-        throw new Error('Failed to start algorithm');
+        throw new Error(`Failed to start algorithm: ${responseText}`);
       }
       
-      const data = await response.json();
+      const data = JSON.parse(responseText);
       console.log('Algorithm started:', data);
       
       useGraphStore.setState({
@@ -231,6 +243,10 @@ export class FlowAlgorithmService {
       
     } catch (error) {
       console.error('Error starting algorithm:', error);
+      useGraphStore.setState({
+        isRunning: false
+      });
+      throw error;
     }
   }
   
