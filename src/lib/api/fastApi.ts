@@ -1,4 +1,3 @@
-// src/lib/fastApi.ts
 import { create } from 'zustand';
 import { AlgorithmConfig, GraphState } from '../types';
 
@@ -85,6 +84,9 @@ export class FlowAlgorithmService {
   
   private handleMessage(data: any): void {
     if (!this.ws) return;
+    
+    // Log all incoming messages for debugging
+    console.log('WebSocket message received:', data);
     
     switch (data.type) {
       case 'init':
@@ -176,6 +178,7 @@ export class FlowAlgorithmService {
         break;
         
       case 'algorithm_complete':
+      case 'algorithm_stopped':  // Add handling for explicit stop messages
         useGraphStore.setState({
           maxFlow: data.max_flow || data.current_flow || 0,
           isRunning: false,
@@ -193,8 +196,11 @@ export class FlowAlgorithmService {
         
       case 'error':
         console.error('Algorithm error:', data.message);
+        // Always ensure we update the running state on errors
         useGraphStore.setState({
-          isRunning: false
+          isRunning: false,
+          inBFS: false,
+          inDFS: false
         });
         break;
         
@@ -212,12 +218,18 @@ export class FlowAlgorithmService {
         this.connect();
       }
       
+      // Ensure speed is a number and properly formatted
+      const safeConfig = {
+        ...config,
+        speed: parseFloat(config.speed.toFixed(1)) // Ensure it's a properly formatted number
+      };
+      
       const response = await fetch(`${this.baseUrl}/start-algorithm`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify(config)
+        body: JSON.stringify(safeConfig)
       });
       
       const responseText = await response.text();
@@ -252,22 +264,41 @@ export class FlowAlgorithmService {
   
   public async stopAlgorithm(): Promise<void> {
     try {
-      const response = await fetch(`${this.baseUrl}/stop-algorithm`, {
-        method: 'POST'
-      });
-      
-      if (!response.ok) {
-        throw new Error('Failed to stop algorithm');
+      // Only use WebSocket for stopping
+      if (this.isConnected()) {
+        this.sendMessage({ command: "stop" });
+        
+        // Set a timeout to force state reset if we don't get a response
+        setTimeout(() => {
+          useGraphStore.setState({
+            isRunning: false,
+            inBFS: false,
+            inDFS: false
+          });
+        }, 1000); // Force reset after 1 second if no response
+      } else {
+        // If WebSocket is not connected, try to reconnect and send stop
+        this.connect();
+        setTimeout(() => {
+          if (this.isConnected()) {
+            this.sendMessage({ command: "stop" });
+          }
+          // Force state reset
+          useGraphStore.setState({
+            isRunning: false,
+            inBFS: false,
+            inDFS: false
+          });
+        }, 500);
       }
-      
+    } catch (error) {
+      console.error('Error stopping algorithm:', error);
+      // Even if there's an error, we should still update the UI state
       useGraphStore.setState({
         isRunning: false,
         inBFS: false,
         inDFS: false
       });
-      
-    } catch (error) {
-      console.error('Error stopping algorithm:', error);
     }
   }
   

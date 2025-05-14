@@ -5,6 +5,7 @@ import AlgorithmControlPanel from './AlgorithmControlPanel';
 import GraphLegend from './GraphLegend';
 import AlgorithmStatusPanel from './AlgorithmStatusPanel';
 import AugmentingPathDisplay from './AugmentingPathDisplay';
+import DFSPathVisualizer from './DFSPathVisualizer';
 import { useGraphStore } from '@/lib/api/fastApi';
 
 const GraphVisualizer = () => {
@@ -15,7 +16,12 @@ const GraphVisualizer = () => {
       <div className="flex flex-col gap-4 overflow-y-auto pb-4">
         <AlgorithmControlPanel />
         <AlgorithmStatusPanel />
-        {isRunning && inDFS && <AugmentingPathDisplay />}
+        {isRunning && inDFS && (
+          <>
+            <DFSPathVisualizer />
+            <AugmentingPathDisplay />
+          </>
+        )}
         <GraphLegend />
       </div>
       <div className="border-2 border-gray-300 rounded-md overflow-hidden bg-gray-50">
