@@ -112,7 +112,7 @@ const VisualizingGraph = () => {
   
   return (
     <div className="w-full h-full">
-      <div className="absolute top-4 right-4 z-10 bg-white p-3 rounded-lg shadow-md text-sm">
+      <div className="absolute top-15 right-4 z-10 bg-white p-3 rounded-lg shadow-md text-sm">
         <div className="flex flex-col space-y-1">
           <div><span className="font-bold">Current Flow:</span> {currentFlow}</div>
           <div><span className="font-bold">Max Flow:</span> {maxFlow}</div>

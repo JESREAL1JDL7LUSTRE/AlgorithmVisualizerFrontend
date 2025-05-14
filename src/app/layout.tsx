@@ -29,7 +29,15 @@ export default function RootLayout({
                   rel="noopener noreferrer"
                   className="text-gray-600 hover:text-gray-900"
                 >
-                  GitHub
+                  GitHub Frontend
+                </a>
+                <a 
+                  href="https://github.com/JESREAL1JDL7LUSTRE/AlgorithmVisualizerBackend" 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="text-gray-600 hover:text-gray-900"
+                >
+                  GitHub Backend
                 </a>
               </div>
             </div>
