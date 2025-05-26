@@ -4,6 +4,9 @@ export interface Edge {
     target: number;
     capacity: number;
     flow: number;
+    isExamining?: boolean;  // Track edges being examined during DFS
+    isExamined?: boolean;   // Track edges that have been examined
+    id?: string;
   }
   
   export interface Node {
@@ -24,6 +27,14 @@ export interface Edge {
     inDFS: boolean;
     visitedNodes: Set<number>;
     currentPath: number[];
+    parallelPaths: number[][];  // Add this to track multiple paths in parallel
+    rejectedPaths: number[][];  // Add this
+    lastRejectedNode: number | null;  // Add this
+    bfsCurrentNode: number | null;  // Track the current BFS node
+    bfsCurrentNodes: number[];  // Track multiple BFS nodes for parallel processing
+    bfsFrontier: number[][];   // Track BFS frontiers for visualization
+    dfsCurrentNode: number | null;  // Track the current DFS node
+    dfsCurrentNodes: number[];  // Track multiple DFS nodes for parallel paths
     algorithm: string;
     graphType: string;
     source: number;

@@ -31,84 +31,175 @@ const VisualizingGraph = () => {
     isRunning,
     inBFS,
     inDFS,
-    currentPath
+    currentPath,
+    parallelPaths = [], // Add parallelPaths from state
+    rejectedPaths = [], // Add default empty array to avoid undefined
+    lastRejectedNode,
+    bfsCurrentNode,
+    bfsCurrentNodes = [], // Add bfsCurrentNodes from state
+    bfsFrontier = [],    // Add BFS frontier from state
+    dfsCurrentNode,
+    dfsCurrentNodes = [] // Add dfsCurrentNodes from state
   } = useGraphStore();
 
   // Calculate which edges are part of the current path
   const pathEdges = useMemo(() => {
     const result = new Set();
+    
+    // Add edges from current path
     if (currentPath && currentPath.length > 1) {
       for (let i = 0; i < currentPath.length - 1; i++) {
         result.add(`${currentPath[i]}-${currentPath[i+1]}`);
       }
     }
-    return result;
-  }, [currentPath]);
-  
-// Transform graph nodes to ReactFlow nodes
-useEffect(() => {
-  if (graphNodes.length > 0) {
-    const reactFlowNodes = graphNodes.map(node => {
-      const isVisited = visitedNodes.has(node.id);
-      const isInPath = currentPath && currentPath.includes(node.id);
-      const isSource = currentPath && currentPath.length > 0 && currentPath[0] === node.id;
-      const isSink = currentPath && currentPath.length > 0 && currentPath[currentPath.length - 1] === node.id;
-      
-      // Get current node index in path (for DFS current highlighting)
-      const pathIndex = currentPath ? currentPath.indexOf(node.id) : -1;
-      const isDFSCurrent = inDFS && pathIndex > 0 && pathIndex < currentPath.length - 1; // Not source or sink, but in path
-      
-      // Determine node color based on its state
-      let nodeColor = '#ffffff'; // Default white
-      
-      // DFS path coloring has priority
-      if (inDFS) {
-        if (isSource) {
-          nodeColor = '#22c55e'; // Green for source
-        } else if (isSink) {
-          nodeColor = '#ef4444'; // Red for sink
-        } else if (isDFSCurrent) {
-          nodeColor = '#ff9900'; // Orange for DFS current (matching the legend)
-        } else if (isInPath) {
-          nodeColor = '#60a5fa'; // Blue for path nodes
-        } else if (isVisited) {
-          nodeColor = '#4dabf7'; // Blue for visited
-        }
-      } else if (inBFS && isVisited) {
-        nodeColor = '#ffcc00'; // Yellow for BFS
-      } else if (isVisited) {
-        nodeColor = '#4dabf7'; // Blue for general visited
-      }
-
-      return {
-        id: node.id.toString(),
-        position: { x: node.x, y: node.y },
-        data: { label: `Node ${node.id}` },
-        style: {
-          background: nodeColor,
-          border: isInPath && inDFS ? '2px solid #3b82f6' : '1px solid #1a192b',
-          borderRadius: '50%',
-          width: (isInPath && inDFS) || isDFSCurrent ? 45 : 40,
-          height: (isInPath && inDFS) || isDFSCurrent ? 45 : 40,
-          display: 'flex',
-          justifyContent: 'center',
-          alignItems: 'center',
-          fontSize: '10px',
-          fontWeight: (isInPath && inDFS) || isDFSCurrent ? 'bold' : 'normal',
-          color: nodeColor === '#ffffff' ? '#1a192b' : '#000000',
-          transition: 'all 0.2s ease',
-          boxShadow: (isInPath && inDFS) 
-            ? '0 0 8px rgba(59, 130, 246, 0.6)' 
-            : isDFSCurrent 
-              ? '0 0 8px rgba(255, 153, 0, 0.6)' 
-              : 'none'
-        }
-      };
-    });
     
-    setNodes(reactFlowNodes);
-  }
-}, [graphNodes, visitedNodes, inBFS, inDFS, currentPath]);
+    // Add edges from all parallel paths
+    if (parallelPaths && parallelPaths.length > 0) {
+      parallelPaths.forEach(path => {
+        if (path && path.length > 1) {
+          for (let i = 0; i < path.length - 1; i++) {
+            result.add(`${path[i]}-${path[i+1]}`);
+          }
+        }
+      });
+    }
+    
+    return result;
+  }, [currentPath, parallelPaths]);
+  
+  // Calculate which edges are part of rejected paths
+  const rejectedPathEdges = useMemo(() => {
+    const result = new Set();
+    if (rejectedPaths && rejectedPaths.length > 0) {
+      rejectedPaths.forEach(path => {
+        if (path && path.length > 1) {
+          for (let i = 0; i < path.length - 1; i++) {
+            result.add(`${path[i]}-${path[i+1]}`);
+          }
+        }
+      });
+    }
+    return result;
+  }, [rejectedPaths]);
+  
+  // In the ReactFlow nodes generation
+  useEffect(() => {
+    if (graphNodes.length > 0) {
+      const reactFlowNodes = graphNodes.map(node => {
+        const isVisited = visitedNodes.has(node.id);
+        const isInPath = currentPath && currentPath.includes(node.id);
+        const isSource = currentPath && currentPath.length > 0 && currentPath[0] === node.id;
+        const isSink = currentPath && currentPath.length > 0 && currentPath[currentPath.length - 1] === node.id;
+        
+        // Check if node is in any parallel path
+        const isInParallelPath = parallelPaths && 
+          parallelPaths.some(path => path && path.includes(node.id));
+        
+        // Add this to check if node is in any rejected path
+        const isInRejectedPath = rejectedPaths && 
+          rejectedPaths.some(path => path && path.includes(node.id));
+        const isLastRejected = lastRejectedNode === node.id;
+        
+        // Use the explicit dfsCurrentNode state
+        const isDFSCurrent = node.id === dfsCurrentNode;
+        
+        // Check if this is one of the current DFS nodes in parallel paths
+        const isParallelDFSCurrent = dfsCurrentNodes && dfsCurrentNodes.includes(node.id);
+        
+        // Check if this is the current BFS node
+        const isBFSCurrent = node.id === bfsCurrentNode;
+        
+        // Check if this is one of the current BFS nodes in parallel frontier
+        const isParallelBFSCurrent = bfsCurrentNodes && bfsCurrentNodes.includes(node.id);
+        
+        // Debug logs
+        if (isDFSCurrent || isParallelDFSCurrent || isBFSCurrent || isParallelBFSCurrent) {
+          console.log(`Node ${node.id} highlighted as: ${
+            isDFSCurrent ? 'DFS Current' : 
+            isParallelDFSCurrent ? 'Parallel DFS' : 
+            isBFSCurrent ? 'BFS Current' : 
+            'Parallel BFS'
+          }`);
+        }
+        
+        // Determine node color based on its state
+        let nodeColor = '#ffffff'; // Default white
+        
+        // DFS current node has highest priority
+        if (isDFSCurrent || isParallelDFSCurrent) {
+          nodeColor = '#ff9900'; // Orange for DFS current
+        }
+        // Then BFS current node
+        else if (isBFSCurrent || isParallelBFSCurrent) {
+          nodeColor = '#ffcc00';  // Yellow for current BFS node
+        }
+        // Then DFS path coloring
+        else if (inDFS || currentPath.length > 0) {
+          if (isSource) {
+            nodeColor = '#22c55e'; // Green for source
+          } else if (isSink) {
+            nodeColor = '#ef4444'; // Red for sink
+          } else if (isInPath || isInParallelPath) {
+            nodeColor = '#60a5fa'; // Blue for path nodes
+          } else if (isLastRejected) {
+            nodeColor = '#f97316'; // Orange for dead-end node
+          } else if (isInRejectedPath) {
+            nodeColor = '#93c5fd'; // Light blue for rejected path nodes
+          } else if (isVisited) {
+            nodeColor = '#4dabf7'; // Blue for visited
+          }
+        } 
+        // Then general visited nodes
+        else if (isVisited) {  
+          nodeColor = '#4dabf7';  // Blue for visited
+        }
+
+        return {
+          id: node.id.toString(),
+          position: { x: node.x, y: node.y },
+          data: { label: `Node ${node.id}` },
+          style: {
+            background: nodeColor,
+            border: isDFSCurrent ? '3px solid #ff9900' :
+                   isParallelDFSCurrent ? '3px solid #ff9900' :
+                   isBFSCurrent ? '3px solid #ffcc00' :
+                   isParallelBFSCurrent ? '3px solid #ffcc00' :
+                   isInPath || isInParallelPath ? '2px solid #3b82f6' : 
+                   isInRejectedPath ? '2px solid #93c5fd' :
+                   isLastRejected ? '2px solid #f97316' :
+                   '1px solid #1a192b',
+            borderRadius: '50%',
+            width: isDFSCurrent || isParallelDFSCurrent || isBFSCurrent || isParallelBFSCurrent ? 55 : 
+                  (isInPath || isInParallelPath) ? 45 : 40,
+            height: isDFSCurrent || isParallelDFSCurrent || isBFSCurrent || isParallelBFSCurrent ? 55 : 
+                   (isInPath || isInParallelPath) ? 45 : 40,
+            display: 'flex',
+            justifyContent: 'center',
+            alignItems: 'center',
+            fontSize: isDFSCurrent || isParallelDFSCurrent || isBFSCurrent || isParallelBFSCurrent ? '14px' : '10px',
+            fontWeight: isDFSCurrent || isParallelDFSCurrent || isBFSCurrent || isParallelBFSCurrent ? '800' : 
+                       (isInPath || isInParallelPath) || isLastRejected ? 'bold' : 'normal',
+            color: isDFSCurrent || isParallelDFSCurrent || isBFSCurrent || isParallelBFSCurrent ? '#000000' : 
+                  nodeColor === '#ffffff' ? '#1a192b' : '#000000',
+            transition: 'all 0.2s ease',
+            boxShadow: isDFSCurrent || isParallelDFSCurrent
+              ? '0 0 12px rgba(255, 153, 0, 0.8)' 
+              : isBFSCurrent || isParallelBFSCurrent
+                ? '0 0 12px rgba(255, 204, 0, 0.8)'
+                : (isInPath || isInParallelPath) 
+                  ? '0 0 8px rgba(59, 130, 246, 0.6)' 
+                  : isLastRejected
+                    ? '0 0 8px rgba(249, 115, 22, 0.6)'
+                    : 'none',
+            // Add a z-index to ensure current nodes stay on top
+            zIndex: isDFSCurrent || isParallelDFSCurrent || isBFSCurrent || isParallelBFSCurrent ? 1000 : 'auto'
+          }
+        };
+      });
+      
+      setNodes(reactFlowNodes);
+    }
+  }, [graphNodes, visitedNodes, inBFS, inDFS, currentPath, parallelPaths, rejectedPaths, lastRejectedNode, bfsCurrentNode, bfsCurrentNodes, dfsCurrentNode, dfsCurrentNodes]);
   
   // Transform graph edges to ReactFlow edges
   useEffect(() => {
@@ -116,6 +207,7 @@ useEffect(() => {
       const reactFlowEdges = graphEdges.map(edge => {
         const edgeId = `${edge.source}-${edge.target}`;
         const isInPath = pathEdges.has(edgeId);
+        const isInRejectedPath = rejectedPathEdges.has(edgeId);
         const flowPercentage = edge.capacity > 0 
           ? (edge.flow / edge.capacity) 
           : 0;
@@ -126,31 +218,60 @@ useEffect(() => {
           target: edge.target.toString(),
           label: `${edge.flow}/${edge.capacity}`,
           style: {
-            strokeWidth: isInPath && inDFS ? 4 : 2 + (flowPercentage * 3),
+            strokeWidth: isInPath && inDFS ? 4 
+              : isInRejectedPath && inDFS ? 3 
+              : edge.isExamining ? 5  // Make examining edges thicker for better visibility
+              : edge.isExamined ? 3
+              : 2 + (flowPercentage * 3),
             stroke: isInPath && inDFS 
               ? '#3b82f6' // Blue for path edges
-              : flowPercentage > 0 
-                ? `rgba(255, 0, 0, ${flowPercentage})` // Red for flow
-                : '#b1b1b7', // Gray default
+              : isInRejectedPath && inDFS
+                ? '#93c5fd' // Light blue for rejected paths
+              : edge.isExamining
+                ? flowPercentage > 0.5 ? '#ff8800' : '#ffc107' // Orange-yellow for examining edges with flow
+              : edge.isExamined
+                ? flowPercentage <= 0 ? '#9ca3af' : // Gray for no flow
+                  flowPercentage < 0.4 ? '#dd4444' : // Red for low flow
+                  flowPercentage < 0.8 ? '#cc2222' : // Darker red for medium flow
+                  '#aa0000' // Darkest red for max flow
+                : flowPercentage > 0 
+                  ? `rgba(255, 0, 0, ${Math.min(0.3 + flowPercentage * 0.7, 1)})` // Red with varying opacity based on flow
+                  : '#b1b1b7', // Gray default
             transition: 'all 0.3s ease',
-            strokeDasharray: isInPath && inDFS ? '5,5' : 'none'
+            strokeDasharray: (isInPath || isInRejectedPath) && inDFS ? '5,5' 
+              : edge.isExamining ? '3,3'  // Different dash pattern for examining edges
+              : 'none',
+            opacity: edge.isExamined && !edge.isExamining && !isInPath ? 0.7 : 1
           },
           markerEnd: {
             type: MarkerType.ArrowClosed,
             color: isInPath && inDFS 
               ? '#3b82f6'
-              : flowPercentage > 0 
-                ? `rgba(255, 0, 0, ${flowPercentage})` 
-                : '#b1b1b7',
+              : isInRejectedPath && inDFS
+                ? '#93c5fd'
+              : edge.isExamining
+                ? flowPercentage > 0.5 ? '#ff8800' : '#ffc107'
+              : edge.isExamined
+                ? flowPercentage <= 0 ? '#9ca3af' : // Gray for no flow
+                  flowPercentage < 0.4 ? '#dd4444' : // Red for low flow
+                  flowPercentage < 0.8 ? '#cc2222' : // Darker red for medium flow
+                  '#aa0000' // Darkest red for max flow
+                : flowPercentage > 0 
+                  ? `rgba(255, 0, 0, ${Math.min(0.3 + flowPercentage * 0.7, 1)})` 
+                  : '#b1b1b7',
           },
-          animated: isInPath || edge.flow > 0,
-          zIndex: isInPath && inDFS ? 1000 : 0 // Bring path edges to front
+          animated: isInPath || edge.flow > 0 || edge.isExamining,
+          zIndex: isInPath && inDFS ? 1000 
+            : isInRejectedPath && inDFS ? 800 
+            : edge.isExamining ? 900
+            : edge.isExamined ? 700
+            : 0 // Bring active edges to front
         };
       });
       
       setEdges(reactFlowEdges);
     }
-  }, [graphEdges, pathEdges, inDFS]);
+  }, [graphEdges, pathEdges, rejectedPathEdges, inDFS]);
   
   // Connect to WebSocket when component mounts
   useEffect(() => {
@@ -168,10 +289,90 @@ useEffect(() => {
           <div><span className="font-bold">Current Flow:</span> {currentFlow}</div>
           <div><span className="font-bold">Max Flow:</span> {maxFlow}</div>
           <div><span className="font-bold">Iteration:</span> {iteration}</div>
-          <div><span className="font-bold">Status:</span> {isRunning ? 'Running...' : 'Idle'}</div>
-          {inDFS && currentPath && currentPath.length > 0 && (
+          <div><span className="font-bold">Status:</span> {isRunning 
+            ? (inBFS) 
+              ? 'Running BFS...' 
+              : (inDFS)
+                ? 'Running DFS...' 
+                : 'Running...' 
+            : 'Idle'}</div>
+          
+          {/* Display BFS frontier */}
+          {inBFS && bfsCurrentNodes && bfsCurrentNodes.length > 0 && (
             <div>
-              <span className="font-bold">Current Path:</span> {currentPath.join(' → ')}
+              <span className="font-bold">BFS Frontier:</span> {bfsCurrentNodes.length} nodes
+              <div className="flex flex-wrap items-center mt-1">
+                {bfsCurrentNodes.map((nodeId) => (
+                  <span 
+                    key={nodeId}
+                    className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-yellow-400 text-black text-xs mr-1 mb-1"
+                  >
+                    {nodeId}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+          
+          {/* Display parallel paths */}
+          {parallelPaths && parallelPaths.length > 0 && (
+            <div>
+              <span className="font-bold">Parallel Paths:</span> {parallelPaths.length}
+              <div className="max-h-48 overflow-y-auto mt-1">
+                {parallelPaths.map((path, pathIndex) => (
+                  <div key={pathIndex} className="mb-1">
+                    <div className="text-xs text-gray-500">Path {pathIndex + 1}:</div>
+                    <div className="flex flex-wrap items-center">
+                      {path.map((nodeId, index) => (
+                        <React.Fragment key={`${pathIndex}-${nodeId}`}>
+                          <span 
+                            className={`inline-flex items-center justify-center w-6 h-6 rounded-full text-white text-xs mr-1
+                              ${dfsCurrentNodes.includes(nodeId)
+                                ? 'bg-orange-500 font-bold' // Current DFS node
+                                : 'bg-blue-500'}`}
+                          >
+                            {nodeId}
+                          </span>
+                          {index < path.length - 1 && (
+                            <span className="mr-1">→</span>
+                          )}
+                        </React.Fragment>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+          
+          {/* Keep the current path display for compatibility */}
+          {currentPath && currentPath.length > 0 && !parallelPaths.length && (
+            <div>
+              <span className="font-bold">Current Path:</span> 
+              <div className="flex flex-wrap items-center mt-1">
+                {currentPath.map((nodeId, index) => (
+                  <React.Fragment key={nodeId}>
+                    <span 
+                      className={`inline-flex items-center justify-center w-6 h-6 rounded-full text-white text-xs mr-1
+                        ${nodeId === dfsCurrentNode
+                          ? 'bg-orange-500 font-bold' // Current DFS node
+                          : 'bg-blue-500'}`}
+                    >
+                      {nodeId}
+                    </span>
+                    {index < currentPath.length - 1 && (
+                      <span className="mr-1">→</span>
+                    )}
+                  </React.Fragment>
+                ))}
+              </div>
+            </div>
+          )}
+          
+          {/* Display rejected paths count */}
+          {rejectedPaths && rejectedPaths.length > 0 && (
+            <div>
+              <span className="font-bold">Rejected Paths:</span> {rejectedPaths.length}
             </div>
           )}
         </div>

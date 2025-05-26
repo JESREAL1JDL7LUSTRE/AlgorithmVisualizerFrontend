@@ -186,14 +186,6 @@ const AlgorithmControlPanel = () => {
         >
           Start
         </Button>
-        <Button 
-          className="flex-1" 
-          variant="destructive" 
-          onClick={handleStopAlgorithm}
-          disabled={!isRunning}
-        >
-          Stop
-        </Button>
       </div>
     </div>
   );
