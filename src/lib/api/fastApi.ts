@@ -174,7 +174,8 @@ export class FlowAlgorithmService {
           }),
           // Always set the target node as the current DFS node when an edge is examined
           dfsCurrentNode: data.target,
-          inDFS: true // Make sure DFS mode is enabled
+          inDFS: true, // Make sure DFS mode is enabled
+          inBFS: false  // Make sure BFS mode is disabled
         }));
         console.log("Edge examined, highlighting target node:", data.target);
         break;
@@ -203,8 +204,12 @@ export class FlowAlgorithmService {
         break;
         
       case 'bfs_complete':
-        // Keep BFS state for visualization similar to DFS
-        console.log("BFS completed, preserving visualization");
+        // Update state to indicate BFS is complete
+        useGraphStore.setState({
+          inBFS: false,
+          // Keep any other visualization state
+        });
+        console.log("BFS completed, transitioning to DFS phase");
         break;
         
       case 'bfs_frontier':
@@ -283,6 +288,7 @@ export class FlowAlgorithmService {
             [...state.dfsCurrentNodes, currentNode];
             
           return {
+            inBFS: false, // Ensure BFS is false when in DFS mode
             inDFS: true,
             currentPath: currentPath, // Keep the most recent path as current
             parallelPaths: updatedParallelPaths,
@@ -345,9 +351,9 @@ export class FlowAlgorithmService {
           return {
             maxFlow: data.max_flow || data.current_flow || 0,
             isRunning: false,
-            // Keep inDFS true to maintain visualization
-            // inBFS: false,
-            // inDFS: false,
+            // We want to keep the current phase for visualization
+            // but we don't want to override the state if we're in DFS mode
+            inBFS: false, // Force BFS to be off at the end
             // Set dfsCurrentNode to the last node in the path if not already set
             dfsCurrentNode: state.dfsCurrentNode || lastNodeInPath,
             bfsCurrentNode: null // Clear BFS current node

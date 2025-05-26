@@ -37,7 +37,6 @@ const VisualizingGraph = () => {
     lastRejectedNode,
     bfsCurrentNode,
     bfsCurrentNodes = [], // Add bfsCurrentNodes from state
-    bfsFrontier = [],    // Add BFS frontier from state
     dfsCurrentNode,
     dfsCurrentNodes = [] // Add dfsCurrentNodes from state
   } = useGraphStore();
