@@ -1,5 +1,5 @@
 "use client"
-import React, { useEffect, useMemo } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import ReactFlow, { 
   MiniMap, 
   Controls, 
@@ -38,8 +38,12 @@ const VisualizingGraph = () => {
     bfsCurrentNode,
     bfsCurrentNodes = [], // Add bfsCurrentNodes from state
     dfsCurrentNode,
-    dfsCurrentNodes = [] // Add dfsCurrentNodes from state
+    dfsCurrentNodes = [], // Add dfsCurrentNodes from state
+    bfsFrontier = []     // Add BFS frontier data
   } = useGraphStore();
+
+  // New state to track BFS levels
+  const [nodeLevels, setNodeLevels] = useState<Map<number, number>>(new Map());
 
   // Calculate which edges are part of the current path
   const pathEdges = useMemo(() => {
@@ -80,10 +84,87 @@ const VisualizingGraph = () => {
     }
     return result;
   }, [rejectedPaths]);
+
+  // Calculate node levels based on BFS frontiers and visited nodes
+  useEffect(() => {
+    // Only update levels when in BFS mode
+    if (inBFS || (visitedNodes.size > 0 && bfsFrontier.length > 0)) {
+      const newLevels = new Map<number, number>();
+      
+      // Set source node to level 0
+      if (currentPath.length > 0) {
+        newLevels.set(currentPath[0], 0);
+      }
+      
+      // Process each frontier to assign levels
+      bfsFrontier.forEach((frontier, index) => {
+        frontier.forEach(nodeId => {
+          if (!newLevels.has(nodeId)) {
+            newLevels.set(nodeId, index + 1);
+          }
+        });
+      });
+      
+      // For nodes that are visited but not in a frontier, use the visitedNodes set
+      // and try to infer levels from edges
+      if (visitedNodes.size > 0) {
+        visitedNodes.forEach(nodeId => {
+          if (!newLevels.has(nodeId)) {
+            // Try to find an edge from a node with a known level
+            const incomingEdges = graphEdges.filter(edge => edge.target === nodeId);
+            
+            for (const edge of incomingEdges) {
+              const sourceLevel = newLevels.get(edge.source);
+              if (sourceLevel !== undefined) {
+                newLevels.set(nodeId, sourceLevel + 1);
+                break;
+              }
+            }
+            
+            // If we still can't determine the level, assign a default
+            if (!newLevels.has(nodeId)) {
+              newLevels.set(nodeId, 0);
+            }
+          }
+        });
+      }
+      
+      // If we have current BFS nodes, make sure they're at the right level
+      if (bfsCurrentNodes.length > 0) {
+        const currentLevel = Math.max(...Array.from(newLevels.values())) + 1;
+        bfsCurrentNodes.forEach(nodeId => {
+          if (!visitedNodes.has(nodeId)) {
+            newLevels.set(nodeId, currentLevel);
+          }
+        });
+      }
+      
+      setNodeLevels(newLevels);
+    }
+  }, [inBFS, visitedNodes, bfsFrontier, bfsCurrentNodes, graphEdges, currentPath]);
   
   // In the ReactFlow nodes generation
   useEffect(() => {
     if (graphNodes.length > 0) {
+      const maxLevel = Math.max(...Array.from(nodeLevels.values()), 0);
+      const levelWidth = 180; // Reduced horizontal spacing between levels (was 300)
+      
+      // Calculate how many nodes are at each level for positioning
+      const nodesPerLevel = new Map<number, number[]>();
+      
+      // Initialize the map
+      for (let i = 0; i <= maxLevel; i++) {
+        nodesPerLevel.set(i, []);
+      }
+      
+      // Group nodes by level
+      graphNodes.forEach(node => {
+        const level = nodeLevels.get(node.id) || 0;
+        const nodesAtLevel = nodesPerLevel.get(level) || [];
+        nodesAtLevel.push(node.id);
+        nodesPerLevel.set(level, nodesAtLevel);
+      });
+      
       const reactFlowNodes = graphNodes.map(node => {
         const isVisited = visitedNodes.has(node.id);
         const isInPath = currentPath && currentPath.includes(node.id);
@@ -110,16 +191,6 @@ const VisualizingGraph = () => {
         
         // Check if this is one of the current BFS nodes in parallel frontier
         const isParallelBFSCurrent = bfsCurrentNodes && bfsCurrentNodes.includes(node.id);
-        
-        // Debug logs
-        if (isDFSCurrent || isParallelDFSCurrent || isBFSCurrent || isParallelBFSCurrent) {
-          console.log(`Node ${node.id} highlighted as: ${
-            isDFSCurrent ? 'DFS Current' : 
-            isParallelDFSCurrent ? 'Parallel DFS' : 
-            isBFSCurrent ? 'BFS Current' : 
-            'Parallel BFS'
-          }`);
-        }
         
         // Determine node color based on its state
         let nodeColor = '#ffffff'; // Default white
@@ -153,9 +224,29 @@ const VisualizingGraph = () => {
           nodeColor = '#4dabf7';  // Blue for visited
         }
 
+        // Calculate position based on BFS level if available, otherwise use original position
+        let position = { x: node.x, y: node.y };
+        
+        // Use level-based positioning when in BFS mode or if we have level data
+        if (inBFS || nodeLevels.size > 0) {
+          const level = nodeLevels.get(node.id) || 0;
+          const nodesAtLevel = nodesPerLevel.get(level) || [];
+          const indexInLevel = nodesAtLevel.indexOf(node.id);
+          
+          if (indexInLevel !== -1) {
+            const totalNodesAtLevel = nodesAtLevel.length;
+            const verticalSpacing = Math.max(40, 400 / (totalNodesAtLevel + 1)); // Adjusted vertical spacing
+            
+            position = {
+              x: level * levelWidth + 80, // Reduced horizontal offset (was 100)
+              y: (indexInLevel + 1) * verticalSpacing
+            };
+          }
+        }
+
         return {
           id: node.id.toString(),
-          position: { x: node.x, y: node.y },
+          position: position,
           data: { label: `Node ${node.id}` },
           style: {
             background: nodeColor,
@@ -198,7 +289,7 @@ const VisualizingGraph = () => {
       
       setNodes(reactFlowNodes);
     }
-  }, [graphNodes, visitedNodes, inBFS, inDFS, currentPath, parallelPaths, rejectedPaths, lastRejectedNode, bfsCurrentNode, bfsCurrentNodes, dfsCurrentNode, dfsCurrentNodes]);
+  }, [graphNodes, visitedNodes, inBFS, inDFS, currentPath, parallelPaths, rejectedPaths, lastRejectedNode, bfsCurrentNode, bfsCurrentNodes, dfsCurrentNode, dfsCurrentNodes, nodeLevels]);
   
   // Transform graph edges to ReactFlow edges
   useEffect(() => {
@@ -308,6 +399,35 @@ const VisualizingGraph = () => {
                   >
                     {nodeId}
                   </span>
+                ))}
+              </div>
+            </div>
+          )}
+          
+          {/* Display BFS levels if available */}
+          {inBFS && nodeLevels.size > 0 && (
+            <div>
+              <span className="font-bold">BFS Levels:</span>
+              <div className="max-h-24 overflow-y-auto mt-1">
+                {Array.from(new Set(Array.from(nodeLevels.values()))).sort((a, b) => a - b).map(level => (
+                  <div key={level} className="mb-1">
+                    <div className="text-xs text-gray-500">Level {level}:</div>
+                    <div className="flex flex-wrap items-center">
+                      {Array.from(nodeLevels.entries())
+                        .filter(([, nodeLevel]) => nodeLevel === level)
+                        .map(([nodeId]) => (
+                          <span 
+                            key={nodeId}
+                            className={`inline-flex items-center justify-center w-6 h-6 rounded-full text-white text-xs mr-1 mb-1
+                              ${bfsCurrentNodes.includes(Number(nodeId))
+                                ? 'bg-yellow-400 text-black font-bold' 
+                                : 'bg-blue-500'}`}
+                          >
+                            {nodeId}
+                          </span>
+                        ))}
+                    </div>
+                  </div>
                 ))}
               </div>
             </div>
